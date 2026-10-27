@@ -3,15 +3,21 @@
 
 <head>
   <meta charset="utf-8">
-  <title>Biliar 3D</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Biliar 3D HP</title>
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <style>
     :root {
       --bg: #14120f;
       --ink: #efe8d6;
       --mut: #a79d86;
       --brass: #c9a45c;
-      --scrim: rgba(14, 12, 9, .86);
+      --scrim: rgba(14, 12, 9, .9);
+      --glass: rgba(14, 12, 9, .55);
+      --sl: max(12px, env(safe-area-inset-left));
+      --sr: max(12px, env(safe-area-inset-right));
+      --sb: max(12px, env(safe-area-inset-bottom));
+      --st: max(8px, env(safe-area-inset-top));
       color-scheme: dark;
       box-sizing: border-box
     }
@@ -23,7 +29,13 @@
       background: var(--bg);
       color: var(--ink);
       overflow: hidden;
-      font: 15px/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif
+      overscroll-behavior: none;
+      font: 13px/1.35 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: none
     }
 
     canvas {
@@ -33,11 +45,12 @@
 
     #hud {
       position: fixed;
-      left: 16px;
-      top: calc(env(safe-area-inset-top, 0px) + 14px);
+      left: var(--sl);
+      top: var(--st);
       pointer-events: none;
       text-shadow: 0 1px 6px #000;
-      max-width: 62vw
+      max-width: 52vw;
+      font-size: 12.5px
     }
 
     #hud b {
@@ -45,43 +58,108 @@
       font-weight: 600
     }
 
-    #help {
+    .c {
       position: fixed;
-      left: 16px;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
-      color: var(--mut);
-      font-size: 12.5px;
-      pointer-events: none;
-      max-width: 62vw;
-      text-shadow: 0 1px 4px #000
+      touch-action: none
     }
 
     #spin {
-      position: fixed;
-      right: 16px;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-      width: 92px;
-      height: 92px;
+      left: var(--sl);
+      bottom: var(--sb);
+      width: 84px;
+      height: 84px;
       border-radius: 50%;
-      cursor: crosshair;
       box-shadow: 0 0 0 2px var(--brass)
+    }
+
+    .rb {
+      width: 48px;
+      height: 48px;
+      padding: 0;
+      border-radius: 50%;
+      background: var(--glass);
+      bottom: calc(var(--sb) + 18px)
+    }
+
+    #fl {
+      left: calc(var(--sl) + 100px)
+    }
+
+    #fr {
+      left: calc(var(--sl) + 156px)
+    }
+
+    #pw {
+      right: var(--sr);
+      bottom: var(--sb);
+      width: 56px;
+      height: min(62vh, 230px);
+      border: 2px solid var(--brass);
+      border-radius: 28px;
+      background: var(--glass)
+    }
+
+    #pw::before {
+      content: "Daya";
+      position: absolute;
+      top: -20px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: var(--mut);
+      font-size: 12px
+    }
+
+    #pf {
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 0;
+      background: var(--brass);
+      border-radius: 26px
+    }
+
+    .sb {
+      padding: 6px 14px;
+      font-size: 12px;
+      background: var(--glass)
+    }
+
+    #bz {
+      right: var(--sr);
+      top: var(--st)
+    }
+
+    #bc {
+      right: calc(var(--sr) + 72px);
+      top: var(--st)
+    }
+
+    #bp {
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: var(--sb);
+      background: var(--brass);
+      color: #14120f;
+      padding: 10px 24px
     }
 
     .ov {
       position: fixed;
       inset: 0;
+      z-index: 10;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 14px;
+      gap: 8px;
       background: var(--scrim);
       text-align: center;
-      padding: 24px
+      padding: 8px 24px;
+      overflow: auto
     }
 
     .ov h1 {
-      font-size: clamp(44px, 9vw, 92px);
+      font-size: clamp(30px, 11vh, 64px);
       font-weight: 500;
       letter-spacing: -.02em;
       margin: 0;
@@ -91,7 +169,7 @@
     .ov p {
       margin: 0;
       color: var(--mut);
-      max-width: 46ch
+      max-width: 52ch
     }
 
     .bt {
@@ -106,12 +184,12 @@
       color: var(--ink);
       background: none;
       border: 1px solid var(--brass);
-      padding: 10px 22px;
+      padding: 8px 18px;
       border-radius: 999px;
       cursor: pointer
     }
 
-    button:hover,
+    button:active,
     button:focus-visible {
       background: var(--brass);
       color: #14120f;
@@ -120,24 +198,42 @@
 
     label {
       color: var(--mut);
-      font-size: 13px;
+      font-size: 12px;
       display: inline-flex;
-      gap: 8px;
+      gap: 6px;
       align-items: center
     }
 
+    #rot {
+      display: none;
+      z-index: 20
+    }
+
+    @media (orientation:portrait) {
+      #rot {
+        display: flex
+      }
+    }
+
     .hide {
-      display: none
+      display: none !important
     }
   </style>
 </head>
 
 <body>
   <div id="hud"></div>
-  <div id="help">Mouse: putar bidikan. Tahan klik kiri, tarik ke bawah, lepas untuk memukul. Klik kanan seret: kamera.
-    Roda: zoom. A/D: bidik halus (Shift lebih halus). C: kamera. R: ulang. Esc: jeda. Lingkaran kanan bawah: titik pukul
-    (spin).</div>
-  <canvas id="spin" width="184" height="184"></canvas>
+  <canvas id="spin" class="c" width="184" height="184"></canvas>
+  <button id="fl" class="c rb">◀</button><button id="fr" class="c rb">▶</button>
+  <div id="pw" class="c">
+    <div id="pf"></div>
+  </div>
+  <button id="bc" class="c sb">Kamera</button><button id="bz" class="c sb">Jeda</button>
+  <button id="bp" class="c sb hide">Taruh bola</button>
+  <div id="rot" class="ov">
+    <h1>↻</h1>
+    <p>Putar ponsel ke mode landscape untuk bermain.</p>
+  </div>
   <div id="ov" class="ov"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
@@ -149,13 +245,13 @@
     function snd(f, g, d = .05, t = 'triangle') { if (!AC || vol <= 0) return; g = Math.min(1, g); if (g < .02) return; const n = AC.currentTime, o = AC.createOscillator(), a = AC.createGain(); o.type = t; o.frequency.setValueAtTime(f, n); o.frequency.exponentialRampToValueAtTime(f * .4, n + d); a.gain.setValueAtTime(Math.max(.001, g * vol * .5), n); a.gain.exponentialRampToValueAtTime(.0001, n + d); o.connect(a); a.connect(AC.destination); o.start(n); o.stop(n + d) }
     /* ---------- scene ---------- */
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
     document.body.prepend(renderer.domElement);
     const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0d0c0a);
     const camera = new THREE.PerspectiveCamera(45, 1, .05, 30);
     scene.add(new THREE.HemisphereLight(0xfff2dc, 0x201a12, .7));
-    const lamp = new THREE.SpotLight(0xfff0d8, 1.15, 0, .95, .7); lamp.position.set(0, 2.5, .2); lamp.castShadow = true; lamp.shadow.mapSize.set(2048, 2048); lamp.shadow.bias = -.0004; lamp.shadow.camera.near = 1; lamp.shadow.camera.far = 5; scene.add(lamp);
+    const lamp = new THREE.SpotLight(0xfff0d8, 1.15, 0, .95, .7); lamp.position.set(0, 2.5, .2); lamp.castShadow = true; lamp.shadow.mapSize.set(1024, 1024); lamp.shadow.bias = -.0004; lamp.shadow.camera.near = 1; lamp.shadow.camera.far = 5; scene.add(lamp);
     function tex(w, h, fn, rep) { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]) } return t }
     const feltT = tex(256, 256, (g, w, h) => { g.fillStyle = '#1f6e4d'; g.fillRect(0, 0, w, h); for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? '0,0,0' : '255,255,255'},${Math.random() * .07})`; g.fillRect(Math.random() * w, Math.random() * h, 1.5, 1.5) } }, [8, 4]);
     const woodT = tex(256, 256, (g, w, h) => { g.fillStyle = '#4a2a18'; g.fillRect(0, 0, w, h); for (let i = 0; i < 160; i++) { g.strokeStyle = `rgba(${Math.random() < .5 ? '20,8,0' : '150,90,50'},${Math.random() * .14})`; g.lineWidth = Math.random() * 2.5; g.beginPath(); g.moveTo(0, Math.random() * h); g.bezierCurveTo(w * .3, Math.random() * h, w * .6, Math.random() * h, w, Math.random() * h); g.stroke() } }, [4, 1]);
@@ -183,7 +279,7 @@
         else { g.fillStyle = '#c33'; g.beginPath(); g.arc(w * .25, h / 2, 3, 0, 7); g.fill() }
       })
     }
-    const bg = new THREE.SphereGeometry(R, 48, 32), balls = [];
+    const bg = new THREE.SphereGeometry(R, 32, 20), balls = [];
     for (let i = 0; i < 16; i++) {
       const m = new THREE.Mesh(bg, new THREE.MeshPhysicalMaterial({ map: ballTex(i), roughness: .22, clearcoat: .9, clearcoatRoughness: .12 })); m.castShadow = true; scene.add(m);
       balls.push({ id: i, mesh: m, p: new THREE.Vector3(), v: new THREE.Vector3(), w: new THREE.Vector3(), out: false, off: false, fall: 0, fc: null })
@@ -275,19 +371,19 @@
       const g = S.grp[cp], goOn = !why && (m == '8' ? pk.some(i => i && i != 8 && inG(i, g)) : pk.some(i => i));
       if (why) S.fouls[cp]++; if (win >= 0) { end(win); return }
       if (why || !goOn) S.cp = 1 - cp;
-      S.msg = why ? `Foul: ${why}. Pemain ${S.cp + 1} menaruh bola putih (klik).` : goOn ? 'Lanjut menembak.' : 'Giliran berganti.';
+      S.msg = why ? `Foul: ${why}. Pemain ${S.cp + 1} menaruh bola putih (geser, lalu tekan Taruh bola).` : goOn ? 'Lanjut menembak.' : 'Giliran berganti.';
       if (sc) spot(balls[0], -.635, 0); S.state = why ? 'place' : 'aim'
     }
     /* ---------- UI ---------- */
     const OV = $('#ov'), sp = $('#spin');
     function ov(t, s, btns) {
       S.paused = true; OV.className = 'ov'; OV.innerHTML = `<h1>${t}</h1><p>${s}</p><div class="bt"></div><div><label>Suara <input id="vol" type="range" min="0" max="1" step=".05" value="${vol}"></label> <label>Sensitivitas <input id="sens" type="range" min=".3" max="2.5" step=".1" value="${S.sens}"></label></div>`;
-      const bt = OV.querySelector('.bt'); for (const [l, f] of btns) { const b = document.createElement('button'); b.textContent = l; b.onclick = () => { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); f() }; bt.appendChild(b) }
+      const bt = OV.querySelector('.bt'); for (const [l, f] of btns) { const b = document.createElement('button'); b.textContent = l; b.onclick = () => { au(); fs(); f() }; bt.appendChild(b) }
       $('#vol').oninput = e => vol = +e.target.value; $('#sens').oninput = e => S.sens = +e.target.value
     }
     function hideOv() { OV.className = 'ov hide'; S.paused = false }
     function start(m) { setup(m); hideOv() }
-    function menu() { setup('8'); S.state = 'menu'; ov('Biliar', 'Simulasi biliar 3D tanpa garis bidik. Baca sudut, pantulan, dan kekuatan sendiri.', [['Latihan', () => start('p')], ['8-Ball', () => start('8')], ['9-Ball', () => start('9')]]) }
+    function menu() { setup('8'); S.state = 'menu'; ov('Biliar', 'Tanpa garis bidik. Geser layar untuk membidik, tarik bilah Daya di kanan ke bawah lalu lepas untuk memukul. Lingkaran kiri mengatur titik pukul.', [['Latihan', () => start('p')], ['8-Ball', () => start('8')], ['9-Ball', () => start('9')]]) }
     function pause() { if (S.state == 'menu' || S.state == 'over' || S.paused) return; ov('Jeda', '', [['Lanjut', hideOv], ['Mulai ulang', () => start(S.mode)], ['Menu', menu]]) }
     let hudT = ''; function hud() {
       const g = S.grp[S.cp], nm = { p: 'Latihan', '8': '8-Ball', '9': '9-Ball' }[S.mode];
@@ -296,35 +392,42 @@
     function drawSpin() { const g = sp.getContext('2d'); g.clearRect(0, 0, 184, 184); g.fillStyle = '#f4f1ea'; g.beginPath(); g.arc(92, 92, 90, 0, 7); g.fill(); g.strokeStyle = '#bbb'; g.beginPath(); g.moveTo(92, 6); g.lineTo(92, 178); g.moveTo(6, 92); g.lineTo(178, 92); g.stroke(); g.fillStyle = '#c33'; g.beginPath(); g.arc(92 + S.ox * 76, 92 - S.oy * 76, 9, 0, 7); g.fill() }
     function spinPt(e) { const r = sp.getBoundingClientRect(); let x = (e.clientX - r.left) / r.width * 2 - 1, y = -((e.clientY - r.top) / r.height * 2 - 1); const l = Math.hypot(x, y); if (l > .95) { x *= .95 / l; y *= .95 / l } S.ox = x; S.oy = y; drawSpin() }
     sp.onpointerdown = e => { sp.setPointerCapture(e.pointerId); spinPt(e) }; sp.onpointermove = e => { if (e.buttons) spinPt(e) }; drawSpin();
-    /* ---------- input ---------- */
-    const keys = {}, rc = new THREE.Raycaster(), pl = new THREE.Plane(new THREE.Vector3(0, 1, 0), -R), pt = new THREE.Vector3(), cv = renderer.domElement;
-    let y0 = 0;
-    cv.oncontextmenu = e => e.preventDefault();
-    cv.onpointerdown = e => {
-      if (S.paused) return; AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-      if (e.button == 0) { if (S.state == 'place') { S.state = 'aim'; S.msg = ''; return } if (S.state == 'aim') { S.state = 'pull'; y0 = e.clientY; S.pull = 0 } }
+    /* ---------- input sentuh ---------- */
+    const keys = {}, rc = new THREE.Raycaster(), pl = new THREE.Plane(new THREE.Vector3(0, 1, 0), -R), pt = new THREE.Vector3(), cv = renderer.domElement, tp = new Map(), cl = (v, a, b) => Math.max(a, Math.min(b, v));
+    let y0 = 0, pwH = 160;
+    function au() { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.resume) AC.resume() }
+    function fs() { try { const d = document.documentElement; if (!document.fullscreenElement && d.requestFullscreen) d.requestFullscreen().then(() => { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => { }) }).catch(() => { }) } catch (_) { } }
+    function placeAt(e) { rc.setFromCamera({ x: e.clientX / innerWidth * 2 - 1, y: -(e.clientY / innerHeight * 2 - 1) }, camera); if (rc.ray.intersectPlane(pl, pt)) { const x = cl(pt.x, -HX + .1, HX - .1), z = cl(pt.z, -HZ + .1, HZ - .1); if (free(balls[0], x, z)) balls[0].p.set(x, R, z) } }
+    // geser 1 jari: bidik (atau geser bola putih saat foul); 2 jari: cubit untuk zoom; mode orbit: geser untuk memutar kamera
+    cv.onpointerdown = e => { if (S.paused) return; cv.setPointerCapture(e.pointerId); tp.set(e.pointerId, { x: e.clientX, y: e.clientY }); au(); if (S.state == 'place' && tp.size == 1) placeAt(e) };
+    cv.onpointermove = e => {
+      const o = tp.get(e.pointerId); if (!o || S.paused) return; const dx = e.clientX - o.x, dy = e.clientY - o.y;
+      if (tp.size > 1) { const a = [...tp.values()], d0 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); o.x = e.clientX; o.y = e.clientY; const d1 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); if (d0 > 20 && d1 > 20) cm.dist = cl(cm.dist * d0 / d1, .5, 2.2); return }
+      o.x = e.clientX; o.y = e.clientY;
+      if (S.state == 'place') placeAt(e);
+      else if (S.cam == 2) { cm.yaw -= dx * .006; cm.pitch = cl(cm.pitch + dy * .004, -.25, 1) }
+      else if (S.state == 'aim') { S.aim += dx * .0045 * S.sens; if (S.cam == 0) cm.pitch = cl(cm.pitch + dy * .003, -.25, 1) }
     };
-    cv.onmousemove = e => {
-      if (S.paused) return;
-      if (e.buttons & 2) { cm.yaw -= e.movementX * .005; cm.pitch = Math.max(-.25, Math.min(1, cm.pitch + e.movementY * .004)); return }
-      if (S.state == 'pull') S.pull = Math.max(0, Math.min(1, (e.clientY - y0) / 240));
-      else if (S.state == 'aim' && !keys.Shift) S.aim += e.movementX * .0022 * S.sens;
-      else if (S.state == 'place') { rc.setFromCamera({ x: e.clientX / innerWidth * 2 - 1, y: -(e.clientY / innerHeight * 2 - 1) }, camera); if (rc.ray.intersectPlane(pl, pt)) { const x = Math.max(-HX + .1, Math.min(HX - .1, pt.x)), z = Math.max(-HZ + .1, Math.min(HZ - .1, pt.z)); if (free(balls[0], x, z)) balls[0].p.set(x, R, z) } }
-    };
-    addEventListener('pointerup', e => { if (e.button != 0 || S.state != 'pull') return; if (S.pull < .03) { S.state = 'aim'; S.pull = 0 } else { S.state = 'strike'; S.st = 0 } });
-    cv.onwheel = e => { cm.dist = Math.max(.5, Math.min(2.2, cm.dist * (1 + Math.sign(e.deltaY) * .08))) };
-    addEventListener('keydown', e => {
-      keys[e.key] = true; const k = e.key.toLowerCase(); if (k == 'escape' || k == 'p') { S.paused ? (S.state != 'menu' && S.state != 'over' && hideOv()) : pause() }
-      else if (S.paused) return; else if (k == 'c') S.cam = (S.cam + 1) % 3; else if (k == 'r') start(S.mode); else if (k == 'm') menu()
-    });
-    addEventListener('keyup', e => keys[e.key] = false);
+    cv.onpointerup = cv.onpointercancel = e => { tp.delete(e.pointerId) };
+    // bilah daya: tarik ke bawah lalu lepas untuk memukul
+    const pw = $('#pw'), pf = $('#pf'), bp = $('#bp');
+    pw.onpointerdown = e => { if (S.paused || S.state != 'aim') return; pw.setPointerCapture(e.pointerId); au(); S.state = 'pull'; y0 = e.clientY; S.pull = 0; pwH = pw.getBoundingClientRect().height * .8 };
+    pw.onpointermove = e => { if (S.state == 'pull') S.pull = cl((e.clientY - y0) / pwH, 0, 1) };
+    pw.onpointerup = () => { if (S.state != 'pull') return; if (S.pull < .03) { S.state = 'aim'; S.pull = 0 } else { S.state = 'strike'; S.st = 0 } };
+    pw.onpointercancel = () => { if (S.state == 'pull') { S.state = 'aim'; S.pull = 0 } };
+    for (const [id, k] of [['fl', 'fa'], ['fr', 'fd']]) { const b = $('#' + id); b.onpointerdown = e => { e.preventDefault(); b.setPointerCapture(e.pointerId); keys[k] = true }; b.onpointerup = b.onpointercancel = () => { keys[k] = false } }
+    bp.onclick = () => { if (S.state == 'place') { S.state = 'aim'; S.msg = '' } };
+    $('#bc').onclick = e => { S.cam = (S.cam + 1) % 3; e.target.textContent = ['Kamera: bidik', 'Kamera: atas', 'Kamera: orbit'][S.cam] };
+    $('#bz').onclick = pause;
+    document.addEventListener('visibilitychange', () => { if (document.hidden) pause() });
+    function ui() { bp.classList.toggle('hide', S.state != 'place'); pf.style.height = S.pull * 100 + '%' }
     /* ---------- loop ---------- */
     const qq = new THREE.Quaternion(), ax = new THREE.Vector3(); let last = performance.now(), acc = 0;
-    function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix() } addEventListener('resize', resize); resize();
+    function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix() } addEventListener('resize', () => { resize(); if (innerHeight > innerWidth) pause() }); resize();
     function frame(now) {
       requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; const c = balls[0];
       if (!S.paused) {
-        if (S.state == 'aim') { const r = keys.Shift ? .07 : .45; if (keys.a || keys.A) S.aim -= r * dt; if (keys.d || keys.D) S.aim += r * dt }
+        if (S.state == 'aim') { const r = keys.Shift ? .07 : .45; if (keys.fa) S.aim -= .09 * dt; if (keys.fd) S.aim += .09 * dt }
         if (S.state == 'strike') { S.st += dt; S.pd = S.pull * .25 * Math.max(0, 1 - S.st / .07); if (S.st >= .07) fire() }
         if (S.state == 'roll') {
           acc += dt; let n = 0; while (acc >= H && n < 48) { phys(); acc -= H; n++ } if (acc > H * 48) acc = 0;
@@ -346,7 +449,7 @@
       else { az = -Math.PI / 2 + cm.yaw; el = .55 + cm.pitch; dist = 2.6 * cm.dist; tx = tz = 0 }
       const k = 1 - Math.exp(-dt * 6); sm.az += (az - sm.az) * k; sm.el += (Math.min(1.45, Math.max(.1, el)) - sm.el) * k; sm.d += (dist - sm.d) * k; sm.x += (tx - sm.x) * k; sm.z += (tz - sm.z) * k;
       camera.position.set(sm.x - Math.cos(sm.az) * Math.cos(sm.el) * sm.d, Math.max(.14, Math.sin(sm.el) * sm.d), sm.z - Math.sin(sm.az) * Math.cos(sm.el) * sm.d); camera.lookAt(sm.x, .02, sm.z);
-      hud(); renderer.render(scene, camera)
+      hud(); ui(); renderer.render(scene, camera)
     }
     menu(); requestAnimationFrame(frame);
   </script>
