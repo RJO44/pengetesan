@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="utf-8">
+  <title>Biliar 3D</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root {
+      --bg: #14120f;
+      --ink: #efe8d6;
+      --mut: #a79d86;
+      --brass: #c9a45c;
+      --scrim: rgba(14, 12, 9, .86);
+      color-scheme: dark;
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      overflow: hidden;
+      font: 15px/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif
+    }
+
+    canvas {
+      display: block;
+      touch-action: none
+    }
+
+    #hud {
+      position: fixed;
+      left: 16px;
+      top: calc(env(safe-area-inset-top, 0px) + 14px);
+      pointer-events: none;
+      text-shadow: 0 1px 6px #000;
+      max-width: 62vw
+    }
+
+    #hud b {
+      color: var(--brass);
+      font-weight: 600
+    }
+
+    #help {
+      position: fixed;
+      left: 16px;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+      color: var(--mut);
+      font-size: 12.5px;
+      pointer-events: none;
+      max-width: 62vw;
+      text-shadow: 0 1px 4px #000
+    }
+
+    #spin {
+      position: fixed;
+      right: 16px;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+      width: 92px;
+      height: 92px;
+      border-radius: 50%;
+      cursor: crosshair;
+      box-shadow: 0 0 0 2px var(--brass)
+    }
+
+    .ov {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: var(--scrim);
+      text-align: center;
+      padding: 24px
+    }
+
+    .ov h1 {
+      font-size: clamp(44px, 9vw, 92px);
+      font-weight: 500;
+      letter-spacing: -.02em;
+      margin: 0;
+      line-height: 1
+    }
+
+    .ov p {
+      margin: 0;
+      color: var(--mut);
+      max-width: 46ch
+    }
+
+    .bt {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center
+    }
+
+    button {
+      font: inherit;
+      color: var(--ink);
+      background: none;
+      border: 1px solid var(--brass);
+      padding: 10px 22px;
+      border-radius: 999px;
+      cursor: pointer
+    }
+
+    button:hover,
+    button:focus-visible {
+      background: var(--brass);
+      color: #14120f;
+      outline: none
+    }
+
+    label {
+      color: var(--mut);
+      font-size: 13px;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .hide {
+      display: none
+    }
+  </style>
+</head>
+
+<body>
+  <div id="hud"></div>
+  <div id="help">Mouse: putar bidikan. Tahan klik kiri, tarik ke bawah, lepas untuk memukul. Klik kanan seret: kamera.
+    Roda: zoom. A/D: bidik halus (Shift lebih halus). C: kamera. R: ulang. Esc: jeda. Lingkaran kanan bawah: titik pukul
+    (spin).</div>
+  <canvas id="spin" width="184" height="184"></canvas>
+  <div id="ov" class="ov"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    "use strict";
+    const R = .028575, HX = 1.27, HZ = .635, G = 9.81, MS = .2, MR = .012, EB = .96, MB = .06, H = 1 / 480;
+    const $ = s => document.querySelector(s);
+    /* ---------- audio ---------- */
+    let AC, vol = .6;
+    function snd(f, g, d = .05, t = 'triangle') { if (!AC || vol <= 0) return; g = Math.min(1, g); if (g < .02) return; const n = AC.currentTime, o = AC.createOscillator(), a = AC.createGain(); o.type = t; o.frequency.setValueAtTime(f, n); o.frequency.exponentialRampToValueAtTime(f * .4, n + d); a.gain.setValueAtTime(Math.max(.001, g * vol * .5), n); a.gain.exponentialRampToValueAtTime(.0001, n + d); o.connect(a); a.connect(AC.destination); o.start(n); o.stop(n + d) }
+    /* ---------- scene ---------- */
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+    document.body.prepend(renderer.domElement);
+    const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0d0c0a);
+    const camera = new THREE.PerspectiveCamera(45, 1, .05, 30);
+    scene.add(new THREE.HemisphereLight(0xfff2dc, 0x201a12, .7));
+    const lamp = new THREE.SpotLight(0xfff0d8, 1.15, 0, .95, .7); lamp.position.set(0, 2.5, .2); lamp.castShadow = true; lamp.shadow.mapSize.set(2048, 2048); lamp.shadow.bias = -.0004; lamp.shadow.camera.near = 1; lamp.shadow.camera.far = 5; scene.add(lamp);
+    function tex(w, h, fn, rep) { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]) } return t }
+    const feltT = tex(256, 256, (g, w, h) => { g.fillStyle = '#1f6e4d'; g.fillRect(0, 0, w, h); for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? '0,0,0' : '255,255,255'},${Math.random() * .07})`; g.fillRect(Math.random() * w, Math.random() * h, 1.5, 1.5) } }, [8, 4]);
+    const woodT = tex(256, 256, (g, w, h) => { g.fillStyle = '#4a2a18'; g.fillRect(0, 0, w, h); for (let i = 0; i < 160; i++) { g.strokeStyle = `rgba(${Math.random() < .5 ? '20,8,0' : '150,90,50'},${Math.random() * .14})`; g.lineWidth = Math.random() * 2.5; g.beginPath(); g.moveTo(0, Math.random() * h); g.bezierCurveTo(w * .3, Math.random() * h, w * .6, Math.random() * h, w, Math.random() * h); g.stroke() } }, [4, 1]);
+    const felt = new THREE.MeshStandardMaterial({ map: feltT, roughness: 1 }), cush = new THREE.MeshStandardMaterial({ color: 0x185a40, roughness: .95 }), wood = new THREE.MeshStandardMaterial({ map: woodT, roughness: .55 }), dark = new THREE.MeshBasicMaterial({ color: 0x050505 });
+    function box(w, h, d, m, x, y, z) { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; scene.add(o); return o }
+    box(2 * HX + .1, .04, 2 * HZ + .1, felt, 0, -.02, 0); box(2 * HX + .5, .2, 2 * HZ + .5, wood, 0, -.14, 0);
+    for (const sz of [-1, 1]) {
+      box(2 * HX + .5, .06, .16, wood, 0, .03, sz * (HZ + .13)); box(.16, .062, 2 * HZ + .5, wood, sz * (HX + .13), .031, 0);
+      for (const sx of [-1, 1]) {
+        box(1.11, .036, .05, cush, sx * .625, .018, sz * (HZ + .025));
+        const l = new THREE.Mesh(new THREE.CylinderGeometry(.07, .08, .8, 16), wood); l.position.set(sx * (HX + .1), -.44, sz * (HZ + .1)); l.castShadow = true; scene.add(l)
+      }
+      box(.05, .036, 2 * (HZ - .09), cush, sz * (HX + .025), .018, 0)
+    }
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({ color: 0x211b15, roughness: 1 })); floor.rotation.x = -Math.PI / 2; floor.position.y = -.84; floor.receiveShadow = true; scene.add(floor);
+    const PK = []; for (const sx of [-1, 1]) for (const sz of [-1, 1]) PK.push([sx * (HX + .015), sz * (HZ + .015), .065]); PK.push([0, HZ + .03, .06], [0, -HZ - .03, .06]);
+    for (const c of PK) { const d = new THREE.Mesh(new THREE.CircleGeometry(c[2] * 1.02, 28), dark); d.rotation.x = -Math.PI / 2; d.position.set(c[0], .003, c[1]); scene.add(d) }
+    const KB = []; for (const s of [-1, 1]) { KB.push([.07, s * HZ], [-.07, s * HZ], [HX - .09, s * HZ], [-(HX - .09), s * HZ], [s * HX, HZ - .09], [s * HX, -(HZ - .09)]) }
+    /* ---------- bola ---------- */
+    const COL = ['', '#f2c230', '#1e4fb5', '#c8281e', '#5a2a86', '#e8742a', '#1f7a3d', '#7a1f1f', '#111'];
+    function ballTex(id) {
+      return tex(256, 128, (g, w, h) => {
+        const c = id ? COL[id > 8 ? id - 8 : id] : '#f4f1ea'; g.fillStyle = id > 8 ? '#f4f1ea' : c; g.fillRect(0, 0, w, h); if (id > 8) { g.fillStyle = c; g.fillRect(0, h * .27, w, h * .46) }
+        if (id) { g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold ' + h * .2 + 'px sans-serif'; for (const x of [w * .25, w * .75]) { g.fillStyle = '#f4f1ea'; g.beginPath(); g.arc(x, h / 2, h * .17, 0, 7); g.fill(); g.fillStyle = '#111'; g.fillText(id, x, h / 2 + 1) } }
+        else { g.fillStyle = '#c33'; g.beginPath(); g.arc(w * .25, h / 2, 3, 0, 7); g.fill() }
+      })
+    }
+    const bg = new THREE.SphereGeometry(R, 48, 32), balls = [];
+    for (let i = 0; i < 16; i++) {
+      const m = new THREE.Mesh(bg, new THREE.MeshPhysicalMaterial({ map: ballTex(i), roughness: .22, clearcoat: .9, clearcoatRoughness: .12 })); m.castShadow = true; scene.add(m);
+      balls.push({ id: i, mesh: m, p: new THREE.Vector3(), v: new THREE.Vector3(), w: new THREE.Vector3(), out: false, off: false, fall: 0, fc: null })
+    }
+    /* ---------- stik ---------- */
+    const cue = new THREE.Group(), cin = new THREE.Group(); cin.rotation.z = -.06; cue.add(cin);
+    {
+      const a = new THREE.Mesh(new THREE.CylinderGeometry(.005, .009, .7, 16), new THREE.MeshStandardMaterial({ color: 0xe2c08a, roughness: .5 })), b = new THREE.Mesh(new THREE.CylinderGeometry(.009, .014, .7, 16), new THREE.MeshStandardMaterial({ color: 0x2b1a10, roughness: .4 }));
+      for (const [m, x] of [[a, -.35], [b, -1.05]]) { m.rotation.z = -Math.PI / 2; m.position.x = x; m.castShadow = true; cin.add(m) }
+      const tip = new THREE.Mesh(new THREE.CylinderGeometry(.0052, .0052, .008, 12), new THREE.MeshStandardMaterial({ color: 0x3b6ea8 })); tip.rotation.z = -Math.PI / 2; tip.position.x = .004; cin.add(tip)
+    }
+    scene.add(cue);
+    /* ---------- status ---------- */
+    const S = { mode: 'p', state: 'menu', cp: 0, grp: [null, null], aim: 0, pull: 0, pd: 0, st: 0, ox: 0, oy: 0, paused: true, msg: '', fouls: [0, 0], shots: 0, pots: 0, cam: 0, shot: null, settle: 0, sens: 1, my8: false, low: 1 };
+    const cm = { yaw: 0, pitch: 0, dist: 1 }, sm = { az: -1.57, el: .5, d: 2.6, x: 0, z: 0 };
+    const inG = (id, g) => g == 's' ? id >= 1 && id <= 7 : id >= 9;
+    const free = (b, x, z) => balls.every(o => o === b || o.out || o.off || Math.hypot(o.p.x - x, o.p.z - z) > 2.02 * R);
+    function spot(b, x, z) { b.out = false; b.fall = 0; b.mesh.visible = true; b.mesh.scale.setScalar(1); b.v.set(0, 0, 0); b.w.set(0, 0, 0); for (let t = 0; t < 40; t++) { const zz = z + (t % 2 ? 1 : -1) * Math.ceil(t / 2) * 2.1 * R; if (free(b, x, zz)) { b.p.set(x, R, zz); return } } b.p.set(x, R, z) }
+    const sh = a => a.sort(() => Math.random() - .5);
+    function setup(m) {
+      S.mode = m; S.cp = 0; S.grp = [null, null]; S.fouls = [0, 0]; S.shots = 0; S.pots = 0; S.aim = 0; S.pull = 0; S.pd = 0; S.shot = null; S.msg = m == 'p' ? 'Latihan bebas.' : 'Pemain 1 memecah rak.';
+      for (const b of balls) { b.out = false; b.fall = 0; b.off = m == '9' && b.id > 9; b.mesh.visible = !b.off; b.mesh.scale.setScalar(1); b.v.set(0, 0, 0); b.w.set(0, 0, 0); b.mesh.quaternion.setFromEuler(new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6)) }
+      let ord; if (m == '9') { const p = sh([2, 3, 4, 5, 6, 7, 8]); ord = [1, p[0], p[1], p[2], 9, p[3], p[4], p[5], p[6]] }
+      else { const s = sh([1, 2, 3, 4, 5, 6, 7]), t = sh([9, 10, 11, 12, 13, 14, 15]), rest = sh([...s.slice(1), ...t.slice(1)]); ord = []; let k = 0; for (let i = 0; i < 15; i++)ord[i] = i == 4 ? 8 : i == 10 ? s[0] : i == 14 ? t[0] : rest[k++] }
+      let i = 0; (m == '9' ? [1, 2, 3, 2, 1] : [1, 2, 3, 4, 5]).forEach((n, c) => { for (let j = 0; j < n; j++)balls[ord[i++]].p.set(.635 + c * R * 1.7325, R, (j - (n - 1) / 2) * (2 * R + .0004)) });
+      spot(balls[0], -.635, 0); S.state = 'aim'
+    }
+    /* ---------- fisika ---------- */
+    function bounce(b, nx, nz) {
+      const v = b.v, vn = v.x * nx + v.z * nz, e = Math.max(.55, .86 - .04 * vn), J = (1 + e) * vn; v.x -= J * nx; v.z -= J * nz;
+      // gesekan bantalan: kecepatan kontak tangensial = v.t - wy*R; ujung ke sidespin
+      const tx = -nz, tz = nx, ut = v.x * tx + v.z * tz - b.w.y * R, F = -Math.sign(ut) * Math.min(.2 * J, Math.abs(ut) / 3.5); v.x += F * tx; v.z += F * tz; b.w.y -= 2.5 * F / R;
+      if (S.shot && S.shot.first !== null) S.shot.rail = true; snd(240, vn / 5, .09, 'sine')
+    }
+    function pocket(b, c) { b.out = true; b.fall = 1e-4; b.fc = c; b.v.set(0, 0, 0); b.w.set(0, 0, 0); if (S.shot) S.shot.pocketed.push(b.id); snd(120, .7, .25, 'sine') }
+    function phys() {
+      for (const b of balls) {
+        if (b.out || b.off) continue; const v = b.v, w = b.w, p = b.p; p.x += v.x * H; p.z += v.z * H;
+        // gesekan kain: meluncur (Coulomb) lalu menggelinding (hambatan guling)
+        const ux = v.x + R * w.z, uz = v.z - R * w.x, um = Math.hypot(ux, uz);
+        if (um > .001) { const k = Math.min(MS * G * H, um / 3.5), nx = ux / um, nz = uz / um; v.x -= nx * k; v.z -= nz * k; w.x += 2.5 * nz * k / R; w.z -= 2.5 * nx * k / R }
+        else { const sp = Math.hypot(v.x, v.z); if (sp < .004) { v.set(0, 0, 0); w.x = w.z = w.y = 0 } else { const d = Math.min(sp, MR * G * H) / sp; v.x -= v.x * d; v.z -= v.z * d; w.z = -v.x / R; w.x = v.z / R } }
+        w.y *= 1 - 1.2 * H;
+        if (Math.abs(p.z) > HZ - R) { const s = Math.sign(p.z); if (s * v.z > 0 && Math.abs(p.x) > .07 && Math.abs(p.x) < HX - .09) { p.z = s * (HZ - R); bounce(b, 0, s) } }
+        if (Math.abs(p.x) > HX - R) { const s = Math.sign(p.x); if (s * v.x > 0 && Math.abs(p.z) < HZ - .09) { p.x = s * (HX - R); bounce(b, s, 0) } }
+        for (const k of KB) { const dx = p.x - k[0], dz = p.z - k[1], d = Math.hypot(dx, dz), r = R + .012; if (d < r && d > 1e-6) { const nx = dx / d, nz = dz / d, vn = v.x * nx + v.z * nz; if (vn < 0) { v.x -= 1.6 * vn * nx; v.z -= 1.6 * vn * nz; snd(300, -vn / 5, .05, 'sine') } p.x = k[0] + nx * r; p.z = k[1] + nz * r } }
+      }
+      for (let i = 0; i < 16; i++) {
+        const a = balls[i]; if (a.out || a.off) continue;
+        for (let j = i + 1; j < 16; j++) {
+          const c = balls[j]; if (c.out || c.off) continue; const dx = c.p.x - a.p.x, dz = c.p.z - a.p.z, d2 = dx * dx + dz * dz; if (d2 >= 4 * R * R) continue;
+          const d = Math.sqrt(d2) || 1e-6, nx = dx / d, nz = dz / d, ov = (2 * R - d) / 2; a.p.x -= nx * ov; a.p.z -= nz * ov; c.p.x += nx * ov; c.p.z += nz * ov;
+          const vr = (a.v.x - c.v.x) * nx + (a.v.z - c.v.z) * nz; if (vr <= 0) continue;
+          const Jn = (1 + EB) / 2 * vr; a.v.x -= Jn * nx; a.v.z -= Jn * nz; c.v.x += Jn * nx; c.v.z += Jn * nz;
+          // gesekan kontak antar bola: efek throw dan transfer spin
+          const ws = a.w.y + c.w.y, rx = a.v.x - c.v.x + R * nz * ws, ry = R * (nx * (a.w.z + c.w.z) - nz * (a.w.x + c.w.x)), rz = a.v.z - c.v.z - R * nx * ws, rn = rx * nx + rz * nz, tx = rx - rn * nx, tz = rz - rn * nz, tm = Math.hypot(tx, ry, tz);
+          if (tm > 1e-6) {
+            const Jt = Math.min(MB * Jn, tm / 7), fx = -Jt * tx / tm, fy = -Jt * ry / tm, fz = -Jt * tz / tm, q = 2.5 / R, wx = q * -nz * fy, wy = q * (nz * fx - nx * fz), wz = q * nx * fy;
+            a.v.x += fx; a.v.z += fz; c.v.x -= fx; c.v.z -= fz; a.w.x += wx; a.w.y += wy; a.w.z += wz; c.w.x += wx; c.w.y += wy; c.w.z += wz
+          }
+          if (S.shot && S.shot.first === null) { if (a.id == 0) S.shot.first = c.id; else if (c.id == 0) S.shot.first = a.id }
+          snd(2000 + Math.random() * 400, vr / 6, .03)
+        }
+        for (const c of PK) if (Math.hypot(a.p.x - c[0], a.p.z - c[1]) < c[2]) { pocket(a, c); break }
+      }
+    }
+    /* ---------- aturan ---------- */
+    function fire() {
+      const c = balls[0], d = [Math.cos(S.aim), Math.sin(S.aim)], v0 = .25 + S.pull * 7.6, k = v0 / (.4 * R * R), a = S.ox * .55 * R, b = S.oy * .55 * R;
+      c.v.set(d[0] * v0, 0, d[1] * v0); c.w.set(k * b * d[1], k * a, -k * b * d[0]); // topspin/draw (b) dan sidespin (a)
+      S.state = 'roll'; S.settle = 0; S.shots++; S.shot = { first: null, rail: false, pocketed: [] }; S.pull = 0; S.pd = 0; S.msg = '';
+      const g = S.grp[S.cp]; S.my8 = !!g && balls.every(o => o.id == 0 || o.id == 8 || o.off || o.out || !inG(o.id, g));
+      S.low = Math.min(...balls.filter(o => o.id && !o.off && !o.out).map(o => o.id)); snd(1100, v0 / 8, .04)
+    }
+    function end(w) { S.state = 'over'; ov(`Pemain ${w + 1} menang`, `Tembakan: ${S.shots}. Foul: pemain 1 = ${S.fouls[0]}, pemain 2 = ${S.fouls[1]}.`, [['Main lagi', () => start(S.mode)], ['Menu', menu]]) }
+    function resolve() {
+      const sh = S.shot, cp = S.cp, pk = sh.pocketed, m = S.mode, sc = pk.includes(0);
+      if (m == 'p') { S.pots += pk.filter(i => i).length; S.msg = sc ? 'Bola putih masuk, dikembalikan.' : ''; if (sc) spot(balls[0], -.635, 0); if (!balls.some(b => b.id && !b.out)) S.msg = 'Meja bersih. Tekan R untuk menyusun ulang.'; S.state = 'aim'; return }
+      let why = '', win = -1;
+      if (sc) why = 'bola putih masuk'; else if (sh.first === null) why = 'tidak mengenai bola';
+      else if (m == '8') { const g = S.grp[cp]; if (g ? !(inG(sh.first, g) || (S.my8 && sh.first == 8)) : sh.first == 8) why = 'bola pertama salah' }
+      else if (sh.first != S.low) why = 'bola pertama salah';
+      if (!why && !pk.length && !sh.rail) why = 'tidak ada bola menyentuh bantalan';
+      if (m == '8') {
+        if (pk.includes(8)) { if (S.shots == 1) spot(balls[8], .635, 0); else win = (why || !S.my8) ? 1 - cp : cp }
+        if (!S.grp[cp] && !why) { const f = pk.find(i => i && i != 8); if (f) { S.grp[cp] = f < 8 ? 's' : 't'; S.grp[1 - cp] = f < 8 ? 't' : 's' } }
+      }
+      else if (pk.includes(9)) { if (why) spot(balls[9], .635, 0); else win = cp }
+      const g = S.grp[cp], goOn = !why && (m == '8' ? pk.some(i => i && i != 8 && inG(i, g)) : pk.some(i => i));
+      if (why) S.fouls[cp]++; if (win >= 0) { end(win); return }
+      if (why || !goOn) S.cp = 1 - cp;
+      S.msg = why ? `Foul: ${why}. Pemain ${S.cp + 1} menaruh bola putih (klik).` : goOn ? 'Lanjut menembak.' : 'Giliran berganti.';
+      if (sc) spot(balls[0], -.635, 0); S.state = why ? 'place' : 'aim'
+    }
+    /* ---------- UI ---------- */
+    const OV = $('#ov'), sp = $('#spin');
+    function ov(t, s, btns) {
+      S.paused = true; OV.className = 'ov'; OV.innerHTML = `<h1>${t}</h1><p>${s}</p><div class="bt"></div><div><label>Suara <input id="vol" type="range" min="0" max="1" step=".05" value="${vol}"></label> <label>Sensitivitas <input id="sens" type="range" min=".3" max="2.5" step=".1" value="${S.sens}"></label></div>`;
+      const bt = OV.querySelector('.bt'); for (const [l, f] of btns) { const b = document.createElement('button'); b.textContent = l; b.onclick = () => { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); f() }; bt.appendChild(b) }
+      $('#vol').oninput = e => vol = +e.target.value; $('#sens').oninput = e => S.sens = +e.target.value
+    }
+    function hideOv() { OV.className = 'ov hide'; S.paused = false }
+    function start(m) { setup(m); hideOv() }
+    function menu() { setup('8'); S.state = 'menu'; ov('Biliar', 'Simulasi biliar 3D tanpa garis bidik. Baca sudut, pantulan, dan kekuatan sendiri.', [['Latihan', () => start('p')], ['8-Ball', () => start('8')], ['9-Ball', () => start('9')]]) }
+    function pause() { if (S.state == 'menu' || S.state == 'over' || S.paused) return; ov('Jeda', '', [['Lanjut', hideOv], ['Mulai ulang', () => start(S.mode)], ['Menu', menu]]) }
+    let hudT = ''; function hud() {
+      const g = S.grp[S.cp], nm = { p: 'Latihan', '8': '8-Ball', '9': '9-Ball' }[S.mode];
+      const t = `<b>${nm}</b> ${S.mode == 'p' ? `Tembakan ${S.shots}, masuk ${S.pots}` : `Giliran pemain ${S.cp + 1}${g ? (g == 's' ? ' (solid)' : ' (stripe)') : ''}, foul ${S.fouls[0]} : ${S.fouls[1]}`}<br>${S.msg}`; if (t != hudT) { hudT = t; $('#hud').innerHTML = t }
+    }
+    function drawSpin() { const g = sp.getContext('2d'); g.clearRect(0, 0, 184, 184); g.fillStyle = '#f4f1ea'; g.beginPath(); g.arc(92, 92, 90, 0, 7); g.fill(); g.strokeStyle = '#bbb'; g.beginPath(); g.moveTo(92, 6); g.lineTo(92, 178); g.moveTo(6, 92); g.lineTo(178, 92); g.stroke(); g.fillStyle = '#c33'; g.beginPath(); g.arc(92 + S.ox * 76, 92 - S.oy * 76, 9, 0, 7); g.fill() }
+    function spinPt(e) { const r = sp.getBoundingClientRect(); let x = (e.clientX - r.left) / r.width * 2 - 1, y = -((e.clientY - r.top) / r.height * 2 - 1); const l = Math.hypot(x, y); if (l > .95) { x *= .95 / l; y *= .95 / l } S.ox = x; S.oy = y; drawSpin() }
+    sp.onpointerdown = e => { sp.setPointerCapture(e.pointerId); spinPt(e) }; sp.onpointermove = e => { if (e.buttons) spinPt(e) }; drawSpin();
+    /* ---------- input ---------- */
+    const keys = {}, rc = new THREE.Raycaster(), pl = new THREE.Plane(new THREE.Vector3(0, 1, 0), -R), pt = new THREE.Vector3(), cv = renderer.domElement;
+    let y0 = 0;
+    cv.oncontextmenu = e => e.preventDefault();
+    cv.onpointerdown = e => {
+      if (S.paused) return; AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+      if (e.button == 0) { if (S.state == 'place') { S.state = 'aim'; S.msg = ''; return } if (S.state == 'aim') { S.state = 'pull'; y0 = e.clientY; S.pull = 0 } }
+    };
+    cv.onmousemove = e => {
+      if (S.paused) return;
+      if (e.buttons & 2) { cm.yaw -= e.movementX * .005; cm.pitch = Math.max(-.25, Math.min(1, cm.pitch + e.movementY * .004)); return }
+      if (S.state == 'pull') S.pull = Math.max(0, Math.min(1, (e.clientY - y0) / 240));
+      else if (S.state == 'aim' && !keys.Shift) S.aim += e.movementX * .0022 * S.sens;
+      else if (S.state == 'place') { rc.setFromCamera({ x: e.clientX / innerWidth * 2 - 1, y: -(e.clientY / innerHeight * 2 - 1) }, camera); if (rc.ray.intersectPlane(pl, pt)) { const x = Math.max(-HX + .1, Math.min(HX - .1, pt.x)), z = Math.max(-HZ + .1, Math.min(HZ - .1, pt.z)); if (free(balls[0], x, z)) balls[0].p.set(x, R, z) } }
+    };
+    addEventListener('pointerup', e => { if (e.button != 0 || S.state != 'pull') return; if (S.pull < .03) { S.state = 'aim'; S.pull = 0 } else { S.state = 'strike'; S.st = 0 } });
+    cv.onwheel = e => { cm.dist = Math.max(.5, Math.min(2.2, cm.dist * (1 + Math.sign(e.deltaY) * .08))) };
+    addEventListener('keydown', e => {
+      keys[e.key] = true; const k = e.key.toLowerCase(); if (k == 'escape' || k == 'p') { S.paused ? (S.state != 'menu' && S.state != 'over' && hideOv()) : pause() }
+      else if (S.paused) return; else if (k == 'c') S.cam = (S.cam + 1) % 3; else if (k == 'r') start(S.mode); else if (k == 'm') menu()
+    });
+    addEventListener('keyup', e => keys[e.key] = false);
+    /* ---------- loop ---------- */
+    const qq = new THREE.Quaternion(), ax = new THREE.Vector3(); let last = performance.now(), acc = 0;
+    function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix() } addEventListener('resize', resize); resize();
+    function frame(now) {
+      requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; const c = balls[0];
+      if (!S.paused) {
+        if (S.state == 'aim') { const r = keys.Shift ? .07 : .45; if (keys.a || keys.A) S.aim -= r * dt; if (keys.d || keys.D) S.aim += r * dt }
+        if (S.state == 'strike') { S.st += dt; S.pd = S.pull * .25 * Math.max(0, 1 - S.st / .07); if (S.st >= .07) fire() }
+        if (S.state == 'roll') {
+          acc += dt; let n = 0; while (acc >= H && n < 48) { phys(); acc -= H; n++ } if (acc > H * 48) acc = 0;
+          for (const b of balls) { const l = b.w.length(); if (l > 1e-4 && !b.out) { qq.setFromAxisAngle(ax.copy(b.w).normalize(), l * n * H); b.mesh.quaternion.premultiply(qq) } }
+          if (balls.some(b => !b.out && !b.off && (b.v.x || b.v.z))) S.settle = 0; else if ((S.settle += dt) > .35) resolve()
+        }
+      }
+      for (const b of balls) {
+        if (b.fall > 0 && !S.paused) { b.fall += dt; const t = Math.min(1, b.fall / .4), k = Math.min(1, dt * 10); b.p.x += (b.fc[0] - b.p.x) * k; b.p.z += (b.fc[1] - b.p.z) * k; b.mesh.position.set(b.p.x, R - .1 * t * t, b.p.z); b.mesh.scale.setScalar(1 - t * .6); if (t >= 1) { b.mesh.visible = false; b.fall = 0 } }
+        else if (!b.out) b.mesh.position.set(b.p.x, R, b.p.z)
+      }
+      // stik: posisi mengikuti titik pukul yang dipilih, bukan garis bantu
+      const sa = S.state, show = sa == 'aim' || sa == 'pull' || sa == 'strike'; cue.visible = show;
+      if (show) { const pd = sa == 'pull' ? S.pull * .25 : S.pd, d = [Math.cos(S.aim), Math.sin(S.aim)], a = S.ox * .55 * R, gap = R + .008 + pd; cue.position.set(c.p.x - d[0] * gap - d[1] * a, R + S.oy * .55 * R, c.p.z - d[1] * gap + d[0] * a); cue.rotation.y = -S.aim }
+      // kamera halus
+      let az, el, dist, tx = sm.x, tz = sm.z;
+      if (S.cam == 0) { az = S.aim + cm.yaw; el = .36 + cm.pitch; dist = .8 * cm.dist; if (S.state != 'roll') { tx = c.p.x; tz = c.p.z } }
+      else if (S.cam == 1) { az = -Math.PI / 2; el = 1.3; dist = 2.5 * cm.dist; tx = tz = 0 }
+      else { az = -Math.PI / 2 + cm.yaw; el = .55 + cm.pitch; dist = 2.6 * cm.dist; tx = tz = 0 }
+      const k = 1 - Math.exp(-dt * 6); sm.az += (az - sm.az) * k; sm.el += (Math.min(1.45, Math.max(.1, el)) - sm.el) * k; sm.d += (dist - sm.d) * k; sm.x += (tx - sm.x) * k; sm.z += (tz - sm.z) * k;
+      camera.position.set(sm.x - Math.cos(sm.az) * Math.cos(sm.el) * sm.d, Math.max(.14, Math.sin(sm.el) * sm.d), sm.z - Math.sin(sm.az) * Math.cos(sm.el) * sm.d); camera.lookAt(sm.x, .02, sm.z);
+      hud(); renderer.render(scene, camera)
+    }
+    menu(); requestAnimationFrame(frame);
+  </script>
+</body>
+
+</html>
